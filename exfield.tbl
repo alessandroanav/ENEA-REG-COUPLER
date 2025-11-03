@@ -1,0 +1,15 @@
+6 atm2ocn
+psfc:surface_air_pressure:2d:bilinear:cross:cross:Pa:Pa:1.0:0.0:nearest
+sflx:water_flux_into_sea_water:2d:conserve1:cross:cross:mm/s:m/s:0.001:0.0:none
+nflz:surface_heat_flux:2d:conserve1:cross:cross:W/m^2:W/m^2:-1.0:0.0:none
+swrd:shortwave_radiation:2d:conserve1:cross:cross:W/m^2:W/m^2:-1.0:0.0:none
+wndu:eastward_10m_wind:2d:bilinear:cross:cross:m/s:m/s:1.0:0.0:nearest
+wndv:northward_10m_wind:2d:bilinear:cross:cross:m/s:m/s:1.0:0.0:nearest
+1 ocn2atm
+sst:sea_surface_temperature:2d:bilinear:cross:cross:C:K:1.0:273.16:creep
+2 atm2rtm
+soff:surface_runoff:2d:conserve1:cross:cross:mm/s:m/s:0.001:0.0:none
+uoff:subsurface_runoff:2d:conserve1:cross:cross:mm/s:m/s:0.001:0.0:none
+1 rtm2ocn
+rdis:river_discharge:2d:neardtos:cross:cross:m^3:m^3:1.0:0.0:none
+
