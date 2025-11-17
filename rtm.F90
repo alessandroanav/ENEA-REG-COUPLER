@@ -1256,7 +1256,8 @@ module RTM
                         ! Mask out rivers with the outlet points outside the Mediterranean Sea
                         if(D1LAT(m) .gt. 46.0 .or.                           &
                           (D1LAT(m) .gt. 41.0 .and. D1LON(n) .gt. 28.0) .or. &
-                          (D1LAT(m) .gt. 38.0 .and. D1LON(n) .lt. 1.0)) ptr(n,m) = 0.0d0 
+                          (D1LAT(m) .gt. 42.0 .and. D1LON(n) .lt. 2.0) .or.  &
+                          (D1LAT(m) .gt. 37.0 .and. D1LON(n) .lt.-8.0)) ptr(n,m) = 0.0d0 
                       end do
                   end do
             end select
