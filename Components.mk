@@ -1,5 +1,5 @@
 #------------------------------------------------------------------------------------- WRF
-export WRF_DIR=../WRF4.2.2
+export WRF_DIR=/lpor1/clima_0/clima/WRF-MIT_ANAV/CODEs/ENEA-REG_CRESCO8//WRF4.2.2
 
 WRF_INC = \
 	-I${WRF_DIR}/external/RSL_LITE/ \
@@ -37,7 +37,8 @@ WRF_LIB = $(WRF_DIR)/main/libwrflib.a  \
 	-L/afs/enea.it/software/pnetcdf/1_13_0/x86_64/cresco8/rhel9.4/install/impi-oneapi/lib -lpnetcdf 
 	
 #------------------------------------------------------------------------------------- MITgcm
-export MIT_DIR=../MITgcm_z67/verification/MED12_COUPLED_JULY21/build
+#export MIT_DIR=/home/anav/MODELS/ENEA-REG/MITgcm_z67-Darwin/verification/MED12DARWIN/build
+export MIT_DIR=/lpor1/clima_0/clima/WRF-MIT_ANAV/CODEs/ENEA-REG_CRESCO8/MITgcm_z67/verification/MED12_COUPLED_JULY21/build
 
 MIT_OBJ = \
 	${MIT_DIR}/*.o
@@ -49,7 +50,7 @@ MIT_LIB = \
 	-L${MIT_DIR}/
 	
 #------------------------------------------------------------------------------------- RTM
-export RTM_DIR=../CaMa-Flood_v4/src
+export RTM_DIR=/lpor1/clima_0/clima/WRF-MIT_ANAV/CODEs/ENEA-REG_CRESCO8/CaMa-Flood_v4/src
 
 RTM_OBJ = \
 	${RTM_DIR}/*.o

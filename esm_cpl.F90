@@ -409,28 +409,7 @@ module esm_cpl
                   ! Add routehandle to the state    
                   call ESMF_StateAdd(state, (/ routeHandle /), rc=rc)
                   if (CheckErr(rc,__LINE__,u_FILE_u)) return
-!
-               else if (itSrc == Instod .or. itSrc == Indtos) then 
-                  call ESMF_FieldRegridStore(srcField=srcField,         &
-                                 dstField=dstField,                     &
-                                 unmappedaction=unmap,                  &
-                                 routeHandle=routeHandle,               &
-                                 regridmethod=regridmethod,             &
-                                 extrapMethod=extrapMethod,             &
-                                 extrapNumLevels=1,                     &
-                                 srcTermProcessing=srcTermProcessing,   &
-                                 ignoreDegenerate=.true.,               &
-                                 rc=rc)
-                  if (CheckErr(rc,__LINE__,u_FILE_u)) return                              
-                  ! Add name to 1st routehandle    
-                  call ESMF_RouteHandleSet(routeHandle,                 &
-                               name=trim(Rname), rc=rc)
-                  if (CheckErr(rc,__LINE__,u_FILE_u)) return
-!
-                  ! Add routehandle to the state    
-                  call ESMF_StateAdd(state, (/ routeHandle /), rc=rc)
-                  if (CheckErr(rc,__LINE__,u_FILE_u)) return
-!                  
+!                 
                else
                   call ESMF_FieldRegridStore(srcField=srcField,         &
                                  dstField=dstField,                     &

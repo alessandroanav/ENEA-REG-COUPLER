@@ -9,12 +9,15 @@
 !     OCN gridded component code 
 !-----------------------------------------------------------------------
 !
+#define NCERR(lnum) if(ierr/=NF90_NOERR) call nc_err(ierr,lnum)
+
 module OCN
 !
 !-----------------------------------------------------------------------
 !     Used module declarations 
 !-----------------------------------------------------------------------
 !
+USE netcdf
    use ESMF
    use NUOPC
    use NUOPC_Model, &
@@ -1271,7 +1274,7 @@ module OCN
 !     Used module declarations 
 !-----------------------------------------------------------------------
 !
-      use mod_mit_gcm, only : deltaT
+      use mod_mit_gcm, only : deltaT, runoff_ESMF
 !
       implicit none
 !
@@ -1386,6 +1389,12 @@ module OCN
       call MIT_RUN(iter, iLoop, myTime, myIter, myThid)
 !
 !-----------------------------------------------------------------------
+!     Reinitialize temporary river discharge array
+!-----------------------------------------------------------------------
+!
+      runoff_ESMF(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy) = ZERO_R8
+!                  
+!-----------------------------------------------------------------------
 !     Put export fields 
 !-----------------------------------------------------------------------
 !
@@ -1447,7 +1456,7 @@ module OCN
                               wspeed_ESMF, precip_ESMF, runoff_ESMF,    &
                               swdown_ESMF, lwdown_ESMF, apressure_ESMF, &
                               snowprecip_ESMF, uwind_ESMF, vwind_ESMF
-      use mod_mit_gcm, only : xG, yG
+      use mod_mit_gcm, only : xC, yC, maskC
 !
       implicit none
 !
@@ -1462,7 +1471,7 @@ module OCN
 !     Local variable declarations 
 !-----------------------------------------------------------------------
 !
-      integer :: ii, jj, bi, bj, iG, jG, imax, jmax
+      integer :: i, ii, jj, bi, bj, iG, jG, imax, jmax
       integer :: id, iunit
       integer :: iyear, iday, imonth, ihour, iminute, isec
       integer :: LBi, UBi, LBj, UBj
@@ -1470,7 +1479,7 @@ module OCN
       character(ESMF_MAXSTR) :: cname, ofile
       character(ESMF_MAXSTR), allocatable :: itemNameList(:)
       real(ESMF_KIND_R8) :: sfac, addo
-      real(ESMF_KIND_R8), pointer :: ptr(:,:)
+      real(ESMF_KIND_R8), pointer :: ptr(:,:), ptr_river(:,:)
 !
       type(ESMF_VM) :: vm
       type(ESMF_Clock) :: clock
@@ -1479,6 +1488,15 @@ module OCN
       type(ESMF_State) :: importState
       type(ESMF_StateItem_Flag), allocatable :: itemTypeList(:)
 !
+      real(ESMF_KIND_R8) ::  local_discharge(Nx, Ny), rivers(Nx, Ny) 
+!
+type(ESMF_ArraySpec) :: arraySpec
+character(ESMF_MAXSTR) :: ofile1
+type(ESMF_Field) :: field_river
+!
+      integer :: ierr, ncid, varid, lat_dimid, lon_dimid
+      integer, dimension(2) :: dimids
+
       rc = ESMF_SUCCESS
 !
 !-----------------------------------------------------------------------
@@ -1530,6 +1548,26 @@ module OCN
                          itemTypeList=itemTypeList, rc=rc)
       if (CheckErr(rc,__LINE__,u_FILE_u)) return
 !
+!-----------------------------------------------------------------------
+!     Create field to hold the rivers after spreading 
+!-----------------------------------------------------------------------
+!                     
+      ! Create a field containing the rivers aftre spreading
+      call ESMF_ArraySpecSet(arraySpec, typekind=ESMF_TYPEKIND_R8,      &
+                             rank=2, rc=rc)
+      if (CheckErr(rc,__LINE__,u_FILE_u)) return 
+
+      ! Create field 
+      field_river = ESMF_FieldCreate(models(Iocean)%grid,               &
+                                  arraySpec,                            &
+                                  totalLWidth=(/OLx,OLy/),              &
+                                  totalUWidth=(/OLx,OLy/),              &
+                                  staggerloc=ESMF_STAGGERLOC_CENTER,    &
+                                  indexflag=ESMF_INDEX_GLOBAL,          &
+                                  name='river_flow',                    &
+                                  rc=rc)
+      if (CheckErr(rc,__LINE__,u_FILE_u)) return
+!      
 !-----------------------------------------------------------------------
 !     Loop over excahange fields 
 !-----------------------------------------------------------------------
@@ -1791,18 +1829,82 @@ module OCN
                   end do
 
                case ('rdis')
+                                             
+                  ! Collect on first PET the discharge coming from RTM
+                  ! and store it on a local variable (i.e. local_discharge)
+                  call ESMF_FieldGather(field, local_discharge, rootPet=0, rc=rc)
+                  if (CheckErr(rc,__LINE__,u_FILE_u)) return  
+                  
+                  ! Conversion
+                  local_discharge = local_discharge * sfac + addo 
+                  
+                  if (localPet == 0) then  
+                     i = minloc(models(Iocean)%mesh(:)%gtype, dim=1,    &
+                         mask=(models(Iocean)%mesh(:)%gtype == Icross)) 
+
+                     ! Spread a giver river around a radius
+                     rivers(:,:) = .0
+                     do jj = 1, Ny
+                        do ii = 1, Nx
+                           if(local_discharge(ii,jj) > .0 .and. local_discharge(ii,jj) < TOL_R8) then
+
+                              call spread_river_area(Nx, Ny,            &        
+                              models(Iocean)%mesh(i)%glon,              &
+                              models(Iocean)%mesh(i)%glat,              &
+                              models(Iocean)%mesh(i)%gmsk,              &
+                              models(Iocean)%mesh(i)%gare, ii, jj,      &                              
+                              local_discharge(ii,jj), rivers) 
+#if 0
+
+                              call spread_river(Nx, Ny,                 &        
+                              models(Iocean)%mesh(i)%glon,              &
+                              models(Iocean)%mesh(i)%glat,              &
+                              models(Iocean)%mesh(i)%gmsk, ii, jj,      &
+                              local_discharge(ii,jj), rivers) 
+#endif
+
+                           end if     
+                        end do
+                     end do                                                                       
+                  end if
+                 
+                  ! Wait for the root PET to finish its job
+                  call ESMF_VMBarrier(vm, rc=rc)   
+                  if (CheckErr(rc,__LINE__,u_FILE_u)) return  
+
+                  ! Scatter the river flow from PET0 to all other PETs
+                  call ESMF_FieldScatter(field_river, rivers, rootPet=0, rc=rc)
+                  if (CheckErr(rc,__LINE__,u_FILE_u)) return  
+                     
+                  ! Collect the river data 
+                  call ESMF_FieldGet(field_river, localDE=localDE, farrayPtr=ptr_river, rc=rc)
+                  if (CheckErr(rc,__LINE__,u_FILE_u)) return  
+                  
+                  do jj = 1-OLy, sNy+OLy
+                     do ii = 1-OLx, sNx+OLx
+                        iG = myXGlobalLo-1+(bi-1)*sNx+ii
+                        jG = myYGlobalLo-1+(bj-1)*sNy+jj
+                        if ((iG > 0 .and. iG < imax) .and.              &
+                         (jG > 0 .and. jG < jmax) ) then
+                           runoff_ESMF(ii,jj,1,1) = ptr_river(iG,jG)
+                        end if
+                     end do
+                  end do
+
+                  ! Now put the climatological rivers, i.e. (Black Sea and Nile)
                   LBi = myXGlobalLo-1+(bi-1)*sNx+(1-OLx)
                   UBi = myXGlobalLo-1+(bi-1)*sNx+(sNx+OLx)
                   LBj = myYGlobalLo-1+(bj-1)*sNy+(1-OLy)
                   UBj = myYGlobalLo-1+(bj-1)*sNy+(sNy+OLy)
-                  call put_river(vm, clock, LBi, UBi, LBj, UBj,         &
+                  call put_clim_rivers(vm, clock, LBi, UBi, LBj, UBj,   &
                                 ptr, sfac, addo, rc)
                   if (CheckErr(rc,__LINE__,u_FILE_u)) return
+
             end select
 
             ! Debug: write field in ASCII format   
             if (debugLevel > 3) then
-               write(ofile,70) 'ocn_import', trim(itemNameList(item)),     &
+               write(ofile,70) 'ocn_import', trim(itemNameList(item)),  &
                         iyear, imonth, iday, ihour, localPet, localDE
                iunit = localPet*10
                open(unit=iunit, file=trim(ofile)//'.txt')
@@ -1822,12 +1924,33 @@ module OCN
 
          ! Debug: write field in netCDF format    
          if (debugLevel == 3) then
-            write(ofile,80) 'ocn_import', trim(itemNameList(item)),        &
+            ! Write the discharge as coming from RTM
+            write(ofile,80) 'ocn_import', trim(itemNameList(item)),     &
                      iyear, imonth, iday, ihour, iminute, isec
             call ESMF_FieldWrite(field, trim(ofile)//'.nc',             &
                               overwrite=.true., rc=rc) 
             if (CheckErr(rc,__LINE__,u_FILE_u)) return
          end if
+
+         ! Debug: write field in netCDF format    
+         if (debugLevel == 3) then
+            write(ofile,80) 'ocn_import', trim(itemNameList(item)),     &
+                     iyear, imonth, iday, ihour, iminute, isec
+            call ESMF_FieldWrite(field, trim(ofile)//'.nc',             &
+                              overwrite=.true., rc=rc) 
+            if (CheckErr(rc,__LINE__,u_FILE_u)) return
+
+            if( trim(itemNameList(item)) .eq. 'rdis') then
+               ! Write the discharge after spreading it 
+               write(ofile1,90) 'ocn_import_split',                     &
+                       trim(itemNameList(item)),                        &
+                       iyear, imonth, iday, ihour, iminute, isec 
+
+               call ESMF_FieldWrite(field_river, trim(ofile1)//'.nc',   &
+                              overwrite=.true., rc=rc) 
+               if (CheckErr(rc,__LINE__,u_FILE_u)) return 
+            endif            
+         end if                  
 !
       end do ITEM_LOOP
 !
@@ -1837,6 +1960,13 @@ module OCN
 !
       if (allocated(itemNameList)) deallocate(itemNameList)
       if (allocated(itemTypeList)) deallocate(itemTypeList)
+
+      ! Nullify pointer and destroy the field
+      if (associated(ptr_river)) then
+         nullify(ptr_river)
+      end if 
+      call ESMF_FieldDestroy(field_river, rc=rc) 
+      if (CheckErr(rc,__LINE__,u_FILE_u)) return        
 !
 !-----------------------------------------------------------------------
 !     Format definition 
@@ -1846,7 +1976,8 @@ module OCN
  70   format(A10,'_',A,'_',I4,'-',I2.2,'-',I2.2,'_',I2.2,'_',I2.2,'_',I1)
  80   format(A10,'_',A,'_',                                             &
              I4,'-',I2.2,'-',I2.2,'_',I2.2,'_',I2.2,'_',I2.2)
-
+ 90   format(A16,'_',A,'_',                                             &
+             I4,'-',I2.2,'-',I2.2,'_',I2.2,'_',I2.2,'_',I2.2)
 !
    end subroutine OCN_Import
 !
@@ -2025,8 +2156,154 @@ module OCN
    end subroutine OCN_Export
 !
 !===============================================================================
-!   
-   subroutine put_river(vm, clock, LBi, UBi, LBj, UBj,                  &
+!
+   subroutine spread_river_area(nlon, nlat, lon, lat, lsmask, area, i0, j0, river_flux, rivers)
+
+      implicit none
+!-----------------------------------------------------------------------
+!     Imported variable declarations 
+!-----------------------------------------------------------------------
+!      
+      integer, intent(in)                :: nlon, nlat, i0, j0
+      real(ESMF_KIND_R8),  intent(in)    :: lon(nlon,nlat), lat(nlon,nlat), area(nlon,nlat)
+      integer(ESMF_KIND_I4),  intent(in) :: lsmask(nlon,nlat)
+      real(ESMF_KIND_R8), intent(in)     :: river_flux
+      real(ESMF_KIND_R8),  intent(out)   :: rivers(nlon,nlat)
+
+!-----------------------------------------------------------------------
+!     Local variable declarations 
+!-----------------------------------------------------------------------
+! 
+      real*8, parameter      :: Rearth = 6371000.0d0   ! radius of Earth in m 
+      real*8, parameter      :: deg2rad = atan(1.0d0) / 45.0d0
+                   
+      real(8)                :: lon0, lat0
+      real(8)                :: dist, totalArea
+      integer                :: i, j       
+!
+!-----------------------------------------------------------------------
+!     Some initializations
+!-----------------------------------------------------------------------
+!
+      lon0 = lon(i0,j0)
+      lat0 = lat(i0,j0)
+      totalArea = ZERO_R8
+        
+  !------------------------------------------------------------
+  ! 1. Compute the area of ocean grid points around a radius R (m)
+  !------------------------------------------------------------
+
+      do j = 1, ny
+         do i = 1, nx
+            dist = Rearth * acos( sin(lat0*deg2rad)*sin(lat(i,j)*deg2rad) + &
+                   cos(lat0*deg2rad)*cos(lat(i,j)*deg2rad)*cos((lon(i,j)-lon0)*deg2rad) )
+            if (lsmask(i,j) .eq. 1 .and. dist <= RiverRadius) then
+               ! calculate total area of mapped ocean grid points
+               totalArea = totalArea+area(i,j)
+            end if
+         end do
+      end do  
+  !   
+  !==========================================================
+  ! 2. Equally distribute river_flux among all ocean grid points within R
+  !==========================================================
+  !
+      do j = 1, ny
+         do i = 1, nx
+            dist = Rearth * acos( sin(lat0*deg2rad)*sin(lat(i,j)*deg2rad) + &
+                   cos(lat0*deg2rad)*cos(lat(i,j)*deg2rad)*cos((lon(i,j)-lon0)*deg2rad) )
+            if (lsmask(i,j) .eq. 1 .and. dist <= RiverRadius) then
+               rivers(i,j) = rivers(i,j) + river_flux / totalArea
+            end if
+         end do
+      end do 
+!      
+   end subroutine spread_river_area    
+!
+!===============================================================================
+!
+   subroutine spread_river(nlon, nlat, lon, lat, lsmask, i0, j0, river_flux, rivers)
+
+      implicit none
+!-----------------------------------------------------------------------
+!     Imported variable declarations 
+!-----------------------------------------------------------------------
+!      
+      integer, intent(in)                :: nlon, nlat, i0, j0
+      real(ESMF_KIND_R8),  intent(in)    :: lon(nlon,nlat), lat(nlon,nlat)
+      integer(ESMF_KIND_I4),  intent(in) :: lsmask(nlon,nlat)
+      real(ESMF_KIND_R8), intent(in)     :: river_flux
+      real(ESMF_KIND_R8),  intent(out)   :: rivers(nlon,nlat)
+
+!-----------------------------------------------------------------------
+!     Local variable declarations 
+!-----------------------------------------------------------------------
+!  
+      real*8, parameter      :: Rearth = 6371000.0d0   ! radius of Earth in m 
+      real*8, parameter      :: deg2rad = atan(1.0d0) / 45.0d0
+      real*8, parameter      :: max_radius = 60000.0d0    ! safety limit
+                   
+      real(8)                :: lon0, lat0
+      real(8)                :: radius, dist
+      integer                :: i, j, count        
+!
+!-----------------------------------------------------------------------
+!     Some initializations
+!-----------------------------------------------------------------------
+!
+      lon0 = lon(i0,j0)
+      lat0 = lat(i0,j0)
+      radius = RiverRadius
+        
+  !======================================================================
+  ! 1. Loop: count sea points until radius contains at least 1 ocean grid point
+  !======================================================================
+  !
+      do
+         count = 0
+         do j = 1, nlat
+            do i = 1, nlon
+               dist = Rearth * acos( sin(lat0*deg2rad)*sin(lat(i,j)*deg2rad) + &
+                      cos(lat0*deg2rad)*cos(lat(i,j)*deg2rad)*cos((lon(i,j)-lon0)*deg2rad) )
+               if (lsmask(i,j) .eq. 1 .and. dist <= radius) then
+                  count = count + 1
+               end if
+            end do
+         end do
+
+         ! Increases the radius if there are no enought points to spread the flow
+         ! or the river flux after spreading is still large (i.e > 1e-2)          
+         if (count > 0 .and. (river_flux / real(count,8)) .le. 1e-2 ) exit   ! success
+         radius = radius + RiverRadius
+         
+         if (radius > max_radius) then
+            print*,'There are no enought points to spread the flow of the river at ', river_flux, lon0, lat0
+            return
+         end if
+      end do
+  !   
+  !==========================================================
+  ! 2. Equally distribute river_flux among all ocean grid points within R
+  !==========================================================
+  !
+      do j = 1, nlat
+         do i = 1, nlon
+            dist = Rearth * acos( sin(lat0*deg2rad)*sin(lat(i,j)*deg2rad) + &
+                   cos(lat0*deg2rad)*cos(lat(i,j)*deg2rad)*cos((lon(i,j)-lon0)*deg2rad) )         
+            if (lsmask(i,j) .eq. 1 .and. dist <= radius) then
+               rivers(i,j) = river_flux / real(count,8)
+            end if
+         end do
+      end do
+!
+      print '(A, 2I5, A, I6, A, F10.3)',  'River flux found at (i,j) =', i0, j0, ' distributed over ', count, ' sea cells within radius [m]=', radius
+      print '(A, 2I5, A, F6.2, A, F6.4)', 'River flux found at (i,j) =', i0, j0, ' changed from ', river_flux, ' to ', river_flux / real(count,8)   
+!      
+   end subroutine spread_river 
+!
+!===============================================================================
+!
+   subroutine put_clim_rivers(vm, clock, LBi, UBi, LBj, UBj,            &
                            ptr, sfac, addo, rc)
 !
 !-----------------------------------------------------------------------
@@ -2082,9 +2359,6 @@ module OCN
 !-----------------------------------------------------------------------
 !     Fill array with river discharge data
 !-----------------------------------------------------------------------
-!
-      ! reinitialize temporary river discharge array
-      runoff_ESMF(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy) = ZERO_R8
 !
       ! get number of rivers
       nr = size(rivers, dim=1)
@@ -2165,7 +2439,7 @@ module OCN
 !
  110  format(' River (',I2.2,') Discharge [',A,'] : ',F15.6)
 !
-   end subroutine put_river
+   end subroutine put_clim_rivers
 !
 !===============================================================================
 !   
@@ -2236,5 +2510,23 @@ module OCN
    end function findPet
 !
 !===============================================================================
-!   
+! 
+!
+SUBROUTINE nc_err(status,line_nb)
+  USE netcdf
+  IMPLICIT NONE
+
+  integer, intent(in) :: status, line_nb  
+  integer :: line
+
+  if (status /= nf90_noerr) then
+     line=line_nb-1 ! Error occured at the preceding line
+     print*,' '
+     print *, 'NetCDF error on source line',line,trim(nf90_strerror(status))
+     print*,'Programs Stopped'
+     print*,' '
+     stop
+  end if
+END SUBROUTINE nc_err
+   
 end module OCN

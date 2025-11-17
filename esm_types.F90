@@ -37,7 +37,7 @@ module esm_types
    real*8, parameter :: phi = 0.5d0*pi
    real*8, parameter :: D2R = PI/180.0d0
    real*8, parameter :: R2D = 1.0d0/D2R
-    real*8, parameter :: RADIUS = 6371.0d3
+   real*8, parameter :: RADIUS = 6371.0d3
 !
    real(ESMF_KIND_R8), parameter :: MISSING_R8 = 1.0d20
    real(ESMF_KIND_R4), parameter :: MISSING_R4 = 1.0e20
@@ -248,6 +248,7 @@ module esm_types
    integer :: debugLevel
    logical :: restarted
    integer :: riverOpt
+   real*8  :: RiverThreshold, RiverRadius
    type(NUOPC_FreeFormat) :: runSeqFF
    real    :: ATM_dt, OCN_dt, RTM_dt     
 !

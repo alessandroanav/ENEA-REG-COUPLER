@@ -492,6 +492,19 @@ module esm_config
       end if
 !
 !-----------------------------------------------------------------------
+!     Read other river options (only active when RTM is activated) 
+!-----------------------------------------------------------------------
+!
+      if (models(Iriver)%modActive) then
+         call ESMF_ConfigGetAttribute(config, RiverThreshold,           &
+                                      label='RiverThreshold:', rc=rc)
+         if (CheckErr(rc,__LINE__,u_FILE_u)) return
+         call ESMF_ConfigGetAttribute(config, RiverRadius,              &
+                                      label='RiverRadius:', rc=rc)
+         if (CheckErr(rc,__LINE__,u_FILE_u)) return         
+      end if      
+!
+!-----------------------------------------------------------------------
 !     Format definition 
 !-----------------------------------------------------------------------
 !

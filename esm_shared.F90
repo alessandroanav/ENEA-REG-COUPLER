@@ -1,8 +1,7 @@
 !=======================================================================
-! ENEA-REG COUPLER 
-! Based on ESMF library
-! Copyright (c) 2013-2025 Alessandro Anav, Ufuk Turuncoglu, Gianmaria Sannino
-! Licensed under the MIT License. 
+! Regional Earth System Model (RegESM)
+! Copyright (c) 2013-2019 Ufuk Turuncoglu
+! Licensed under the MIT License.
 !=======================================================================
 !
 !-----------------------------------------------------------------------
