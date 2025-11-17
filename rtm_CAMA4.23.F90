@@ -1122,7 +1122,8 @@ module RTM
       USE PARKIND1,           ONLY: JPRM
       USE CMF_UTILS_MOD,      ONLY: vecD2mapR
       USE YOS_CMF_DIAG,       ONLY: D2RIVOUT_oAVG, D2FLDOUT_oAVG
-      USE YOS_CMF_MAP,        ONLY: D2RIVWTH, D2RIVHGT,I2NEXTX,I2NEXTY
+      USE YOS_CMF_MAP,        ONLY: D1LON, D1LAT, D2RIVWTH, D2RIVHGT,   &
+                                    I2NEXTX,I2NEXTY
 !
       implicit none
 !
@@ -1251,7 +1252,12 @@ module RTM
                         ! Select only biggest rivers with a discharge >= 50 m3/s and
                         ! keep only outlet points 
                         if(I2NEXTY(n,m) .ne. -9 .and. I2NEXTY(n,m)/=IMIS .or. ptr(n,m) < RiverThreshold) ptr(n,m) = 0.0d0 
-                     end do
+                        
+                        ! Mask out rivers with the outlet points outside the Mediterranean Sea
+                        if(D1LAT(m) .gt. 46.0 .or.                           &
+                          (D1LAT(m) .gt. 41.0 .and. D1LON(n) .gt. 28.0) .or. &
+                          (D1LAT(m) .gt. 38.0 .and. D1LON(n) .lt. 1.0)) ptr(n,m) = 0.0d0 
+                      end do
                   end do
             end select
             
