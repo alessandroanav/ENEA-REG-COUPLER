@@ -9,8 +9,6 @@
 !     OCN gridded component code 
 !-----------------------------------------------------------------------
 !
-#define NCERR(lnum) if(ierr/=NF90_NOERR) call nc_err(ierr,lnum)
-
 module OCN
 !
 !-----------------------------------------------------------------------
@@ -2512,21 +2510,4 @@ type(ESMF_Field) :: field_river
 !===============================================================================
 ! 
 !
-SUBROUTINE nc_err(status,line_nb)
-  USE netcdf
-  IMPLICIT NONE
-
-  integer, intent(in) :: status, line_nb  
-  integer :: line
-
-  if (status /= nf90_noerr) then
-     line=line_nb-1 ! Error occured at the preceding line
-     print*,' '
-     print *, 'NetCDF error on source line',line,trim(nf90_strerror(status))
-     print*,'Programs Stopped'
-     print*,' '
-     stop
-  end if
-END SUBROUTINE nc_err
-   
 end module OCN
