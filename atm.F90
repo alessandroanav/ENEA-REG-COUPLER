@@ -1892,15 +1892,15 @@ module ATM
                case ('nflz')
                   do j = LBj, UBj
                      do i = LBi, UBi
-                        ptr2d(i,j) = (head_grid%EMISS(i,j)*head_grid%GLW(i,j)-(STBOLT*head_grid%EMISS(i,j)*head_grid%SST(i,j)**4)) - &
-                                      head_grid%lh_mean(i,j) - head_grid%hfx_mean(i,j) 
+                        ptr2d(i,j) = ( head_grid%glw_mean(i,j) - head_grid%lwupb_mean(i,j) ) -  &
+                                       head_grid%lh_mean (i,j) - head_grid%hfx_mean(i,j)
                      end do
                   end do
                
                case ('swrd') 
                   do j = LBj, UBj
                      do i = LBi, UBi
-                        ptr2d(i,j) = head_grid%GSW(i,j)
+                        ptr2d(i,j) = head_grid%swdnb_mean(i,j) - head_grid%swupb_mean(i,j)
                      end do
                   end do
 
