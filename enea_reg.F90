@@ -41,8 +41,8 @@ program enea_reg
 !  applications using s large number of processors, opening a large
 !  number of log files and writing messages can be a bottleneck.
 !
-!  LogKindFlag=ESMF_LOGKIND_SINGLE
-   LogKindFlag=ESMF_LOGKIND_MULTI
+  LogKindFlag=ESMF_LOGKIND_SINGLE
+!   LogKindFlag=ESMF_LOGKIND_MULTI
 
 !-----------------------------------------------------------------------
 !     Initialize ESMF framework

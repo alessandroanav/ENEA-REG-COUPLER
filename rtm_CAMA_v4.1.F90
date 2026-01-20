@@ -1,8 +1,7 @@
 !=======================================================================
-! ENEA-REG COUPLER 
-! Based on ESMF library
-! Copyright (c) 2013-2025 Alessandro Anav, Ufuk Turuncoglu, Gianmaria Sannino
-! Licensed under the MIT License. 
+! Regional Earth System Model (RegESM)
+! Copyright (c) 2013-2019 Ufuk Turuncoglu
+! Licensed under the MIT License.
 !=======================================================================
 !
 !-----------------------------------------------------------------------
@@ -154,10 +153,11 @@ module RTM
    subroutine RTM_SetInitializeP2(gcomp, importState, exportState,      &
                                      clock, rc)
 
-      USE CMF_DRV_CONTROL_MOD,     ONLY: CMF_DRV_INPUT, CMF_DRV_INIT
+!     USE CMF_CTRL_MPI_MOD,        ONLY: CMF_MPI_INIT_ALESS
+      USE CMF_DRV_CONTROL_MOD,     ONLY: CMF_DRV_INPUT, CMF_DRV_INIT, CMF_DRV_END
       USE YOS_CMF_INPUT,           ONLY: LRESTART 
       USE YOS_CMF_PROG,            ONLY: D2RIVOUT, D2FLDOUT
-      USE YOS_CMF_DIAG,            ONLY: D2RIVOUT_oAVG, D2FLDOUT_oAVG 
+      USE YOS_CMF_DIAG,            ONLY: D2RIVOUT_AVG, D2FLDOUT_AVG 
 
       implicit none
 !
@@ -195,11 +195,12 @@ module RTM
 !     Initialize the gridded component 
 !-----------------------------------------------------------------------
 !
+!      CALL CMF_MPI_INIT_ALESS(comm)     ! ALESS, make it working on a single cpu now
        CALL CMF_DRV_INPUT
        CALL CMF_DRV_INIT
        if (LRESTART) then 
-          D2RIVOUT_oAVG(:,:) = D2RIVOUT(:,:)
-          D2FLDOUT_oAVG(:,:) = D2FLDOUT(:,:)
+          D2RIVOUT_AVG(:,:) = D2RIVOUT(:,:)
+          D2FLDOUT_AVG(:,:) = D2FLDOUT(:,:)
        end if 
 !
 !-----------------------------------------------------------------------
@@ -222,7 +223,7 @@ module RTM
    subroutine RTM_DataInit(gcomp, rc)
 
       USE CMF_DRV_ADVANCE_MOD
-      USE CMF_CALC_DIAG_MOD,       ONLY: CMF_DIAG_RESET_OUTPUT
+      USE CMF_CALC_DIAG_MOD,       ONLY: CMF_DIAG_RESET
       USE YOS_CMF_INPUT,           ONLY: LRESTART 
 
       implicit none
@@ -265,9 +266,6 @@ module RTM
 !
       call RTM_Export(gcomp, rc=rc)
       if (CheckErr(rc,__LINE__,u_FILE_u)) return
-      
-      !*** reset CaMa variables
-      CALL CMF_DIAG_RESET_OUTPUT
 !      
    end subroutine RTM_DataInit
 !
@@ -355,8 +353,8 @@ module RTM
 !     Set mask value for land points 
 !-----------------------------------------------------------------------
 !
-     models(Iriver)%isLand  = 1
-     models(Iriver)%isOcean = 0
+     models(Iriver)%isLand  = 0
+     models(Iriver)%isOcean = 1
 !     
 !-----------------------------------------------------------------------
 !     Allocate coordinates, loop over component grid location type 
@@ -666,7 +664,7 @@ module RTM
 !-----------------------------------------------------------------------
 !
       USE CMF_DRV_ADVANCE_MOD
-      USE CMF_CALC_DIAG_MOD,       ONLY: CMF_DIAG_RESET_OUTPUT
+      USE CMF_CALC_DIAG_MOD,       ONLY: CMF_DIAG_RESET
 !
       implicit none
 !
@@ -795,7 +793,7 @@ module RTM
 !-----------------------------------------------------------------------
 !
       call RTM_Import(gcomp, rc=rc)
-      if (CheckErr(rc,__LINE__,u_FILE_u)) return  
+      if (CheckErr(rc,__LINE__,u_FILE_u)) return      
 !
 !-----------------------------------------------------------------------
 !     Run RTM component
@@ -811,7 +809,7 @@ module RTM
       if (CheckErr(rc,__LINE__,u_FILE_u)) return
 
       !*** reset CaMa variables
-      CALL CMF_DIAG_RESET_OUTPUT
+      CALL CMF_DIAG_RESET
 !
 !-----------------------------------------------------------------------
 !     Formats 
@@ -832,7 +830,6 @@ module RTM
    subroutine RTM_SetFinalize(gcomp, importState, exportState,       &
                                  clock, rc)
 
-      USE YOS_CMF_MAP,             ONLY: I2NEXTX,I2NEXTY,I2REGION
       USE CMF_DRV_CONTROL_MOD,     ONLY: CMF_DRV_END
       implicit none
 !
@@ -852,9 +849,6 @@ module RTM
 !     Call model finalize routines
 !-----------------------------------------------------------------------
 !
-      if (allocated(I2NEXTX))  deallocate(I2NEXTX)
-      if (allocated(I2NEXTY))  deallocate(I2NEXTY)
-      if (allocated(I2REGION)) deallocate(I2REGION)            
       CALL CMF_DRV_END
 !
    end subroutine RTM_SetFinalize
@@ -1121,12 +1115,10 @@ module RTM
 !     Used module declarations 
 !-----------------------------------------------------------------------
 !
-      USE YOS_CMF_INPUT,      ONLY: NX,NY,IMIS
+      USE YOS_CMF_INPUT,      ONLY: NX,NY
       USE PARKIND1,           ONLY: JPRM
       USE CMF_UTILS_MOD,      ONLY: vecD2mapR
-      USE YOS_CMF_DIAG,       ONLY: D2RIVOUT_oAVG, D2FLDOUT_oAVG
-      USE YOS_CMF_MAP,        ONLY: D1LON, D1LAT, D2RIVWTH, D2RIVHGT,   &
-                                    I2NEXTX,I2NEXTY
+      USE YOS_CMF_DIAG,       ONLY: D2RIVOUT_AVG, D2FLDOUT_AVG
 !
       implicit none
 !
@@ -1157,7 +1149,6 @@ module RTM
 
       ! Local variables
       REAL(KIND=JPRM)             :: R2OUT_RIVOUT(NX,NY), R2OUT_FLDOUT(NX,NY) 
-      REAL(KIND=JPRM)             :: R2OUT_RIVWTH(NX,NY), R2OUT_RIVHGT(NX,NY)      
 !
       rc = ESMF_SUCCESS
 !
@@ -1230,38 +1221,16 @@ module RTM
             ptr = MISSING_R8
  
             ! convert CaMa 1Dvector to 2Dmap
-            CALL vecD2mapR(D2RIVOUT_oAVG, R2OUT_RIVOUT)             !! average river discharge
-            CALL vecD2mapR(D2FLDOUT_oAVG, R2OUT_FLDOUT)             !! average floodplain discharge
-            CALL vecD2mapR(D2RIVHGT, R2OUT_RIVHGT)
-            CALL vecD2mapR(D2RIVWTH, R2OUT_RIVWTH)
-                        
+            CALL vecD2mapR(D2RIVOUT_AVG, R2OUT_RIVOUT)             !! average river discharge
+            CALL vecD2mapR(D2FLDOUT_AVG, R2OUT_FLDOUT)             !! average floodplain discharge
+
             select case (trim(adjustl(itemNameList(item)))) 
                case ('rdis')
                   do m = 1, NY
                      do n = 1, NX
-#if 0                     
-                        ! First, select only biggest rivers with a discharge >= 50 m3/s
-                        ! Then convert the discharge [m3/s] into a flow [m/s] 
-                        ! dividing the outlet by the river area (i.e. cross section)   
-                        if(R2OUT_RIVOUT(n,m) .ge. 50 .and. R2OUT_RIVWTH(n,m) .gt. 0 .and. R2OUT_RIVHGT(n,m) .gt. 0) then
-                           ptr(n,m) =  R2OUT_RIVOUT(n,m) / ( R2OUT_RIVWTH(n,m) * R2OUT_RIVHGT(n,m) )
-                        else
-                           ptr(n,m)           = 0.0d0
-                        endif
-#endif
-
                         ptr(n,m) =  R2OUT_RIVOUT(n,m) + R2OUT_FLDOUT(n,m)
-
-                        ! Select only biggest rivers with a discharge >= of a given threshold defined in the namelist and
-                        ! keep only outlet points 
-                        if(I2NEXTY(n,m) .ne. -9 .and. I2NEXTY(n,m)/=IMIS .or. ptr(n,m) < RiverThreshold) ptr(n,m) = 0.0d0 
-                        
-                        ! Mask out rivers with the outlet points outside the Mediterranean Sea
-                        if(D1LAT(m) .gt. 46.0 .or.                            &
-                          (D1LAT(m) .gt. 41.0 .and. D1LON(n) .gt. 28.0) .or.  &
-                          (D1LAT(m) .gt. 42.0 .and. D1LON(n) .lt. 2.0)  .or.  &
-                          (D1LAT(m) .gt. 29.0 .and. D1LON(n) .lt.-5.625 )) ptr(n,m) = 0.0d0 
-                      end do
+                        if (ptr(n,m) < 0.0d0) ptr(n,m)           = 0.0d0
+                     end do
                   end do
             end select
             

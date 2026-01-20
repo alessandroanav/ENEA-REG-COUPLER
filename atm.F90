@@ -256,14 +256,14 @@ module ATM
       if ( head_grid%prec_acc_dt .ne. (60.*ATM_dt) ) then
 #if defined(__INTEL_COMPILER)         
          PRINT*, '\033[31m **************** WRF ERROR ************************ \033[0m'    
-         PRINT*, '\033[31m prec_acc_dt (namelist.input) and ATM-OCN coupling frequencies (namelist.rc) are not consistent \033[0m'
+         PRINT*, '\033[31m prec_acc_dt (namelist.input) and ATM-OCN coupling frequencies (namelist.esm) are not consistent \033[0m'
          PRINT*, '\033[31m *************************************************** \033[0m'   
 #else
          PRINT*, '**************** WRF ERROR ************************'    
-         PRINT*, 'prec_acc_dt (namelist.input) and ATM-OCN coupling frequencies (namelist.rc) are not consistent'
+         PRINT*, 'prec_acc_dt (namelist.input) and ATM-OCN coupling frequencies (namelist.esm) are not consistent'
          PRINT*, '***************************************************'   
 #endif               
-         call ESMF_LogWrite("prec_acc_dt (namelist.input) and ATM-OCN coupling frequencies (namelist.rc) are not consistent", ESMF_LOGMSG_ERROR)
+         call ESMF_LogWrite("prec_acc_dt (namelist.input) and ATM-OCN coupling frequencies (namelist.esm) are not consistent", ESMF_LOGMSG_ERROR)
          call ESMF_Finalize(endflag=ESMF_END_ABORT)
       end if 
 
@@ -273,14 +273,14 @@ module ATM
       if ( head_grid%mean_diag_interval .ne. int(60.*ATM_dt) ) then
 #if defined(__INTEL_COMPILER)      
          PRINT*, '\033[31m **************** WRF ERROR ************************ \033[0m'    
-         PRINT*, '\033[31m mean_diag_interval (namelist.input) and ATM-OCN coupling frequencies (namelist.rc) are not consistent \033[0m'
+         PRINT*, '\033[31m mean_diag_interval (namelist.input) and ATM-OCN coupling frequencies (namelist.esm) are not consistent \033[0m'
          PRINT*, '\033[31m *************************************************** \033[0m'  
 #else
          PRINT*, '**************** WRF ERROR ************************'    
-         PRINT*, 'mean_diag_interval (namelist.input) and ATM-OCN coupling frequencies (namelist.rc) are not consistent'
+         PRINT*, 'mean_diag_interval (namelist.input) and ATM-OCN coupling frequencies (namelist.esm) are not consistent'
          PRINT*, '***************************************************'  
 #endif                    
-         call ESMF_LogWrite("mean_diag_interval (namelist.input) and ATM-OCN coupling frequencies (namelist.rc) are not consistent", ESMF_LOGMSG_ERROR)
+         call ESMF_LogWrite("mean_diag_interval (namelist.input) and ATM-OCN coupling frequencies (namelist.esm) are not consistent", ESMF_LOGMSG_ERROR)
          call ESMF_Finalize(endflag=ESMF_END_ABORT)
       end if 
 
@@ -882,10 +882,15 @@ module ATM
 !-----------------------------------------------------------------------
 !  Export initialization or restart fields.
 !-----------------------------------------------------------------------
-! 
-      call ATM_Export(gcomp, rc=rc)
-      if (CheckErr(rc,__LINE__,u_FILE_u)) return
-
+!
+      if (currTime == esmStartTime) then
+         call ATM_Export_init(gcomp, rc=rc)
+         if (CheckErr(rc,__LINE__,u_FILE_u)) return
+      else
+         call ATM_Export(gcomp, rc=rc)
+         if (CheckErr(rc,__LINE__,u_FILE_u)) return   
+      endif   
+!      
    end subroutine ATM_DataInit
 !
 !===============================================================================
@@ -1655,6 +1660,7 @@ module ATM
                !     Import from OCN 
                ! ALESS ( 
                ! Change to remove the Atlantic buffer zone from coupling
+#if 0               
                case ('sst')
                   do j = JminP, JmaxP
                      do i = IminP, ImaxP
@@ -1666,24 +1672,23 @@ module ATM
                      end do
                   end do
             end select
-#if 0
+#endif
+
                case ('sst')
                   do j = JminP, JmaxP
-                     if (i > 96) then  ! 54 in case of MedCordex_15km and 96 for MedCordex_12km
-                        do i = IminP, ImaxP
+                     do i = IminP, ImaxP
+                        if (i > 96) then  ! 54 in case of MedCordex_15km and 96 for MedCordex_12km
                            if (ptr2d(i,j) < TOL_R8) then
                               wrf_import%sst(i,j) = (ptr2d(i,j)*sfac)+addo
                            else
                               wrf_import%sst(i,j) = MISSING_R8
                            end if
-                        end do
-                     end if
-                  end do
+                        end if
+                     end do
+                  end do                 
             end select
-#endif               
 ! ALESS )
 !
-
             ! Nullify pointer to make sure that it does not 
             ! point on a random part in the memory 
             if (associated(ptr2d)) then
@@ -1732,6 +1737,255 @@ module ATM
              I4,'-',I2.2,'-',I2.2,'_',I2.2,'_',I2.2,'_',I2.2)
 !
    end subroutine ATM_Import
+!
+!===============================================================================
+! As RAMS diagnostics are 0 at initiazization (.i.e. very beginning of simulation), 
+! for the first time step only, the OCN component uses instantaneous fields.  
+! 
+! At restart, all the RAMS diagnostics are in the wrfrst
+!
+   subroutine ATM_Export_init(gcomp, rc)
+!
+!-----------------------------------------------------------------------
+!     Used module declarations 
+!-----------------------------------------------------------------------
+!
+      use module_domain, only : head_grid, get_ijk_from_grid
+      use module_model_constants, only : stbolt
+!
+      implicit none
+!
+!-----------------------------------------------------------------------
+!     Imported variable declarations 
+!-----------------------------------------------------------------------
+!
+      type(ESMF_GridComp) :: gcomp
+      integer, intent(out) :: rc
+!
+!-----------------------------------------------------------------------
+!     Local variable declarations 
+!-----------------------------------------------------------------------
+!
+      integer :: LBi, UBi, LBj, UBj      
+      integer :: i, j, k
+      integer :: iyear, iday, imonth, ihour, iminute, isec
+      integer :: petCount, localPet, item, itemCount, localDE, localDECount
+      character(ESMF_MAXSTR) :: cname, ofile
+      character(ESMF_MAXSTR), allocatable :: itemNameList(:)
+
+      real(ESMF_KIND_R8), parameter :: eps=1.0e-10
+      real(ESMF_KIND_R8), pointer :: ptr2d(:,:)
+      integer(ESMF_KIND_I8) :: tstep
+!
+      type(ESMF_VM) :: vm
+      type(ESMF_Clock) :: clock
+      type(ESMF_Time) :: currTime
+      type(ESMF_Field) :: field
+      type(ESMF_State) :: exportState
+      type(ESMF_StateItem_Flag), allocatable :: itemTypeList(:)
+!
+      rc = ESMF_SUCCESS
+!
+!-----------------------------------------------------------------------
+!     Get gridded component 
+!-----------------------------------------------------------------------
+!
+      call ESMF_GridCompGet(gcomp, name=cname, clock=clock,             &
+                            exportState=exportState, vm=vm, rc=rc)
+      if (CheckErr(rc,__LINE__,u_FILE_u)) return
+!
+      call ESMF_VMGet(vm, localPet=localPet, petCount=petCount, rc=rc)
+      if (CheckErr(rc,__LINE__,u_FILE_u)) return
+!
+!-----------------------------------------------------------------------
+!     Get current time
+!-----------------------------------------------------------------------
+
+      call ESMF_ClockGet(clock, currTime=currTime,                      &
+                         advanceCount=tstep, rc=rc)
+      if (CheckErr(rc,__LINE__,u_FILE_u)) return
+!
+      call ESMF_TimeGet(currTime, yy=iyear, mm=imonth,                  &
+                        dd=iday, h=ihour, m=iminute, s=isec, rc=rc)
+      if (CheckErr(rc,__LINE__,u_FILE_u)) return
+!
+!-----------------------------------------------------------------------
+!     Get list of export fields 
+!-----------------------------------------------------------------------
+!
+      call ESMF_StateGet(exportState, itemCount=itemCount, rc=rc)
+      if (CheckErr(rc,__LINE__,u_FILE_u)) return 
+!
+      if (.not. allocated(itemNameList)) then
+        allocate(itemNameList(itemCount))
+      end if
+      if (.not. allocated(itemTypeList)) then
+        allocate(itemTypeList(itemCount))
+      end if
+      call ESMF_StateGet(exportState, itemNameList=itemNameList,        &
+                         itemTypeList=itemTypeList, rc=rc)
+      if (CheckErr(rc,__LINE__,u_FILE_u)) return
+!
+!-----------------------------------------------------------------------
+!     Loop over export fields 
+!-----------------------------------------------------------------------
+
+      ITEM_LOOP: do item = 1, itemCount
+!
+         k = get_varid(models(Iatmos)%exportField, trim(itemNameList(item)))
+
+
+         ! Check rank of the export field
+         if (models(Iatmos)%exportField(k)%rank .ne. 2) then
+#if defined(__INTEL_COMPILER)      
+            PRINT*, '\033[31m **************** WRF ERROR ************************ \033[0m'    
+            PRINT*, '\033[31m The exported variable is not 2D:  \033[0m', models(Iatmos)%exportField(k)%short_name
+            PRINT*, '\033[31m *************************************************** \033[0m'  
+#else
+            PRINT*, '**************** WRF ERROR ************************'    
+            PRINT*, ' The expored variable is not 2D: ',models(Iatmos)%exportField(k)%short_name
+            PRINT*, '***************************************************'  
+#endif                    
+            call ESMF_LogWrite("The WRF expored variable is not 2D:", ESMF_LOGMSG_ERROR)
+            call ESMF_Finalize(endflag=ESMF_END_ABORT)      
+         end if
+
+         ! Get number of local DEs
+         call ESMF_GridGet(models(Iatmos)%grid,                         &
+                           localDECount=localDECount, rc=rc)
+         if (CheckErr(rc,__LINE__,u_FILE_u)) return
+
+         ! Get field from export state 
+         call ESMF_StateGet(exportState, trim(itemNameList(item)),      &
+                            field, rc=rc) 
+         if (CheckErr(rc,__LINE__,u_FILE_u)) return
+
+         ! Loop over decomposition elements (DEs) 
+         DE_LOOP: do localDE = 0, localDECount-1
+
+            ! Get pointer from field 
+            call ESMF_FieldGet(field, localDE=localDE, farrayPtr=ptr2d, rc=rc)
+            if (CheckErr(rc,__LINE__,u_FILE_u)) return
+
+            ! size of the pointer
+            LBi = lbound(ptr2d,1)
+            UBi = ubound(ptr2d,1)
+            LBj = lbound(ptr2d,2)
+            UBj = ubound(ptr2d,2)
+ 
+            ! Set initial value to missing 
+            ptr2d = MISSING_R8
+
+            ! Put data to export field 
+            ! if (localPet == 0) print*, 'ALESS (WRF_Put) at ',iyear,imonth,iday,ihour,iminute,isec
+            select case (trim(adjustl(itemNameList(item)))) 
+
+               case ('psfc')
+                  do j = LBj, UBj
+                     do i = LBi, UBi
+                        ptr2d(i,j) = head_grid%psfc(i,j)*               &
+                                     exp((9.81*head_grid%ht(i,j))/      &
+                                     (287.0*head_grid%t2(i,j)*          &
+                                     (1.0+0.61*head_grid%q2(i,j))))
+                     end do
+                  end do
+                  
+               ! E-P
+               case ('sflx') 
+                  do j = LBj, UBj
+                     do i = LBi, UBi
+                        ptr2d(i,j) = head_grid%qfx(i,j) -               &
+                                     (head_grid%RAINCV(i,j) +            &
+                                      head_grid%RAINNCV(i,j) ) / head_grid%DT
+                     end do
+                  end do
+
+               case ('nflz')
+                  do j = LBj, UBj
+                     do i = LBi, UBi
+                        ptr2d(i,j) = ( head_grid%glw(i,j) - head_grid%lwupb(i,j) ) -  &
+                                       head_grid%lh(i,j)  - head_grid%hfx(i,j)
+                     end do
+                  end do
+               
+               case ('swrd') 
+                  do j = LBj, UBj
+                     do i = LBi, UBi
+                        ptr2d(i,j) = head_grid%swdnb(i,j) - head_grid%swupb(i,j)
+                     end do
+                  end do
+
+               case ('wndu')
+                  do j = LBj, UBj
+                     do i = LBi, UBi
+                        ptr2d(i,j)= head_grid%u10(i,j)*head_grid%cosa(i,j)- &
+                                    head_grid%v10(i,j)*head_grid%sina(i,j)
+                     end do
+                  end do
+                     
+               case ('wndv') 
+                  do j = LBj, UBj
+                     do i = LBi, UBi
+                        ptr2d(i,j) = head_grid%v10(i,j)*head_grid%cosa(i,j)+ &
+                                     head_grid%u10(i,j)*head_grid%sina(i,j)
+                     end do
+                  end do
+
+               case ('soff')
+!                 if (localPet == 0) print*, 'ALESS, Sending surface runoff at',iyear,iday,ihour,iminute 
+                  do j = LBj, UBj
+                     do i = LBi, UBi
+                        ptr2d(i,j) = head_grid%SFCRUNOFF(i,j)
+                     end do
+                  end do
+
+               case ('uoff') 
+!                 if (localPet == 0) print*, 'ALESS, Sending sub-surface runoff at',iyear,iday,ihour,iminute 
+                  do j = LBj, UBj
+                     do i = LBi, UBi
+                        ptr2d(i,j) = head_grid%UDRUNOFF(i,j)
+                     end do
+                  end do
+
+            end select
+
+            ! Nullify pointer to make sure that it does not
+            ! point on a random part in the memory 
+            if (associated(ptr2d)) then
+               nullify(ptr2d)
+            end if
+!
+         end do DE_LOOP
+
+         ! Debug: write field in netCDF format    
+         if (debugLevel == 3) then
+            write(ofile,100) 'atm_export', trim(itemNameList(item)),    &
+                         iyear, imonth, iday, ihour, iminute, isec
+            call ESMF_FieldWrite(field, trim(ofile)//'.nc',&
+                             variableName='data', overwrite=.true.,     &
+                             rc=rc)
+            if (CheckErr(rc,__LINE__,u_FILE_u)) return
+         end if
+!
+      end do ITEM_LOOP
+!
+!-----------------------------------------------------------------------
+!     Deallocate arrays    
+!-----------------------------------------------------------------------
+!
+      if (allocated(itemNameList)) deallocate(itemNameList)
+      if (allocated(itemTypeList)) deallocate(itemTypeList)
+!
+!-----------------------------------------------------------------------
+!     Format definition 
+!-----------------------------------------------------------------------
+!
+ 90   format(A10,'_',A,'_',                                             &
+             I4,'-',I2.2,'-',I2.2,'_',I2.2,'_',I2.2,'_',I1)
+ 100  format(A10,'_',A,'_',                                             &
+             I4,'-',I2.2,'-',I2.2,'_',I2.2,'_',I2.2,'_',I2.2)
+!
+   end subroutine ATM_Export_init   
 !
 !===============================================================================
 !   
@@ -1788,7 +2042,6 @@ module ATM
       call ESMF_VMGet(vm, localPet=localPet, petCount=petCount, rc=rc)
       if (CheckErr(rc,__LINE__,u_FILE_u)) return
 !
-! ALESS ( 
 !-----------------------------------------------------------------------
 !     Get current time
 !-----------------------------------------------------------------------
@@ -1800,7 +2053,6 @@ module ATM
       call ESMF_TimeGet(currTime, yy=iyear, mm=imonth,                  &
                         dd=iday, h=ihour, m=iminute, s=isec, rc=rc)
       if (CheckErr(rc,__LINE__,u_FILE_u)) return
-! ALESS )
 !
 !-----------------------------------------------------------------------
 !     Get list of export fields 

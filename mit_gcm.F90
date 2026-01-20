@@ -47,13 +47,13 @@
       integer nr
       parameter ( &
                 snx =  30, &
-                sny =  8, &
+                sny =  12, &
                 olx =   4, &
                 oly =   4, &
                 nsx =   1, &
                 nsy =   1, &
                 npx =   19, &
-                npy =   33, &
+                npy =   22, &
                 nx  = snx*nsx*npx, &
                 ny  = sny*nsy*npy, &
                 nr  =  75)

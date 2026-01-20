@@ -265,17 +265,6 @@ USE netcdf
       call ESMF_ClockGet(clock, currTime=currTime, rc=rc)
       if (CheckErr(rc,__LINE__,u_FILE_u)) return
 !
-#if 0
-!-----------------------------------------------------------------------
-!     Put export fields (only for restart run)
-!-----------------------------------------------------------------------
-!
-      if (restarted .and. currTime == esmRestartTime) then
-         call OCN_Export(gcomp, rc=rc)
-         if (CheckErr(rc,__LINE__,u_FILE_u)) return
-      end if
-!
-#endif
 !-----------------------------------------------------------------------
 !  Export initialization or restart fields.
 !-----------------------------------------------------------------------
@@ -1376,7 +1365,6 @@ USE netcdf
 !     Get import fields 
 !-----------------------------------------------------------------------
 !
-
       call OCN_Import(gcomp, rc=rc)
       if (CheckErr(rc,__LINE__,u_FILE_u)) return      
 !
@@ -1488,9 +1476,9 @@ USE netcdf
 !
       real(ESMF_KIND_R8) ::  local_discharge(Nx, Ny), rivers(Nx, Ny) 
 !
-type(ESMF_ArraySpec) :: arraySpec
-character(ESMF_MAXSTR) :: ofile1
-type(ESMF_Field) :: field_river
+      type(ESMF_ArraySpec) :: arraySpec
+      character(ESMF_MAXSTR) :: ofile1
+      type(ESMF_Field) :: field_river
 !
       integer :: ierr, ncid, varid, lat_dimid, lon_dimid
       integer, dimension(2) :: dimids
@@ -1827,7 +1815,7 @@ type(ESMF_Field) :: field_river
                   end do
 
                case ('rdis')
-                                             
+
                   ! Collect on first PET the discharge coming from RTM
                   ! and store it on a local variable (i.e. local_discharge)
                   call ESMF_FieldGather(field, local_discharge, rootPet=0, rc=rc)
@@ -1852,14 +1840,6 @@ type(ESMF_Field) :: field_river
                               models(Iocean)%mesh(i)%gmsk,              &
                               models(Iocean)%mesh(i)%gare, ii, jj,      &                              
                               local_discharge(ii,jj), rivers) 
-#if 0
-
-                              call spread_river(Nx, Ny,                 &        
-                              models(Iocean)%mesh(i)%glon,              &
-                              models(Iocean)%mesh(i)%glat,              &
-                              models(Iocean)%mesh(i)%gmsk, ii, jj,      &
-                              local_discharge(ii,jj), rivers) 
-#endif
 
                            end if     
                         end do

@@ -265,6 +265,9 @@ module RTM
 !
       call RTM_Export(gcomp, rc=rc)
       if (CheckErr(rc,__LINE__,u_FILE_u)) return
+      
+      !*** reset CaMa variables
+      CALL CMF_DIAG_RESET_OUTPUT
 !      
    end subroutine RTM_DataInit
 !
@@ -792,7 +795,7 @@ module RTM
 !-----------------------------------------------------------------------
 !
       call RTM_Import(gcomp, rc=rc)
-      if (CheckErr(rc,__LINE__,u_FILE_u)) return      
+      if (CheckErr(rc,__LINE__,u_FILE_u)) return  
 !
 !-----------------------------------------------------------------------
 !     Run RTM component
@@ -1254,9 +1257,10 @@ module RTM
                         if(I2NEXTY(n,m) .ne. -9 .and. I2NEXTY(n,m)/=IMIS .or. ptr(n,m) < RiverThreshold) ptr(n,m) = 0.0d0 
                         
                         ! Mask out rivers with the outlet points outside the Mediterranean Sea
-                        if(D1LAT(m) .gt. 46.0 .or.                           &
-                          (D1LAT(m) .gt. 41.0 .and. D1LON(n) .gt. 28.0) .or. &
-                          (D1LAT(m) .gt. 38.0 .and. D1LON(n) .lt. 1.0)) ptr(n,m) = 0.0d0 
+                        if(D1LAT(m) .gt. 46.0 .or.                            &
+                          (D1LAT(m) .gt. 41.0 .and. D1LON(n) .gt. 28.0) .or.  &
+                          (D1LAT(m) .gt. 42.0 .and. D1LON(n) .lt. 2.0)  .or.  &
+                          (D1LAT(m) .gt. 29.0 .and. D1LON(n) .lt.-5.625 )) ptr(n,m) = 0.0d0 
                       end do
                   end do
             end select
