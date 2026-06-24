@@ -386,7 +386,7 @@ module esm_cpl
                end if
 !     
 !              Create RouteHandle
-               INTERP1: if(itSrc == Icons1 .or. itSrc == Icons1) then
+               INTERP1: if(itSrc == Icons1 .or. itSrc == Icons2) then
                   ! Create 1st RouteHandle for conservative regridding
                   call ESMF_FieldRegridStore(srcField=srcField,         &
                                  dstField=dstField,                     &
@@ -438,7 +438,7 @@ module esm_cpl
 !               
             end if RH1_EXIST               
 ! 
-            INTERP2: if(itSrc == Icons1 .or. itSrc == Icons1) then
+            INTERP2: if(itSrc == Icons1 .or. itSrc == Icons2) then
                ! Conservative methods require a second routehandle
                Rname='rh_'//                                            &
                       TRIM(GRIDDES  (grSrc))//'_'//                     &
@@ -637,7 +637,7 @@ module esm_cpl
          end if                            
 !
          ! Perform conservative interpolation
-         REGRID: if(itSrc == Icons1 .or. itSrc == Icons1) then
+         REGRID: if(itSrc == Icons1 .or. itSrc == Icons2) then
             ! First, use nearestood interpolation
             Rname='rh_'//                                               &
                    TRIM(GRIDDES  (grSrc))//'_'//                        &
