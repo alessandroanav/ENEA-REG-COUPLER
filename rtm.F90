@@ -214,7 +214,6 @@ module RTM
 !   
    subroutine RTM_DataInit(gcomp, rc)
 
-      USE CMF_DRV_ADVANCE_MOD
       USE CMF_CALC_DIAG_MOD,       ONLY: CMF_DIAG_RESET_OUTPUT
       USE YOS_CMF_INPUT,           ONLY: LRESTART 
       USE YOS_CMF_PROG,            ONLY: D2RIVOUT, D2FLDOUT
@@ -1253,7 +1252,7 @@ module RTM
                         endif
 #endif
 
-                        ptr(n,m) =  R2OUT_RIVOUT(n,m) !+ R2OUT_FLDOUT(n,m)
+                        ptr(n,m) =  R2OUT_RIVOUT(n,m) + R2OUT_FLDOUT(n,m)
 
                         ! Select only biggest rivers with a discharge >= 50 m3/s and
                         ! keep only outlet points 
