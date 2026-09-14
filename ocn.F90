@@ -1868,7 +1868,7 @@ USE netcdf
                         end if
                      end do
                   end do
-
+                  
                   ! Now put the climatological rivers, i.e. (Black Sea and Nile)
                   LBi = myXGlobalLo-1+(bi-1)*sNx+(1-OLx)
                   UBi = myXGlobalLo-1+(bi-1)*sNx+(sNx+OLx)
@@ -1877,20 +1877,8 @@ USE netcdf
                   call put_clim_rivers(vm, clock, LBi, UBi, LBj, UBj,   &
                                 ptr, sfac, addo, rc)
                   if (CheckErr(rc,__LINE__,u_FILE_u)) return
-
+!
             end select
-
-            ! Debug: write field in ASCII format   
-            if (debugLevel > 3) then
-               write(ofile,70) 'ocn_import', trim(itemNameList(item)),  &
-                        iyear, imonth, iday, ihour, localPet, localDE
-               iunit = localPet*10
-               open(unit=iunit, file=trim(ofile)//'.txt')
-               call print_matrix(uwind_ESMF(:,:,1,1), 1-OLx, sNx+OLx,   &
-                          1-OLy, sNy+OLy, 1, 1,                         &
-                          localPet, iunit, "PTR/OCN/IMP")
-               close(unit=iunit)
-            end if
 
             ! Nullify pointer to make sure that it does not point 
             ! on a random part in the memory 
@@ -1899,16 +1887,6 @@ USE netcdf
             end if
 !
          end do DE_LOOP      
-
-         ! Debug: write field in netCDF format    
-         if (debugLevel == 3) then
-            ! Write the discharge as coming from RTM
-            write(ofile,80) 'ocn_import', trim(itemNameList(item)),     &
-                     iyear, imonth, iday, ihour, iminute, isec
-            call ESMF_FieldWrite(field, trim(ofile)//'.nc',             &
-                              overwrite=.true., rc=rc) 
-            if (CheckErr(rc,__LINE__,u_FILE_u)) return
-         end if
 
          ! Debug: write field in netCDF format    
          if (debugLevel == 3) then

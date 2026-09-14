@@ -155,10 +155,7 @@ module RTM
                                      clock, rc)
 
       USE CMF_DRV_CONTROL_MOD,     ONLY: CMF_DRV_INPUT, CMF_DRV_INIT
-      USE YOS_CMF_INPUT,           ONLY: LRESTART 
-      USE YOS_CMF_PROG,            ONLY: D2RIVOUT, D2FLDOUT
-      USE YOS_CMF_DIAG,            ONLY: D2RIVOUT_oAVG, D2FLDOUT_oAVG 
-
+!
       implicit none
 !
 !-----------------------------------------------------------------------
@@ -197,10 +194,6 @@ module RTM
 !
        CALL CMF_DRV_INPUT
        CALL CMF_DRV_INIT
-       if (LRESTART) then 
-          D2RIVOUT_oAVG(:,:) = D2RIVOUT(:,:)
-          D2FLDOUT_oAVG(:,:) = D2FLDOUT(:,:)
-       end if 
 !
 !-----------------------------------------------------------------------
 !     Set-up grid and load coordinate data 
@@ -224,7 +217,9 @@ module RTM
       USE CMF_DRV_ADVANCE_MOD
       USE CMF_CALC_DIAG_MOD,       ONLY: CMF_DIAG_RESET_OUTPUT
       USE YOS_CMF_INPUT,           ONLY: LRESTART 
-
+      USE YOS_CMF_PROG,            ONLY: D2RIVOUT, D2FLDOUT
+      USE YOS_CMF_DIAG,            ONLY: D2RIVOUT_oAVG, D2FLDOUT_oAVG       
+!
       implicit none
 !
 !-----------------------------------------------------------------------
@@ -263,6 +258,14 @@ module RTM
 !  Export initialization or restart fields.
 !-----------------------------------------------------------------------
 !
+      if (LRESTART) then 
+         D2RIVOUT_oAVG(:,:) = D2RIVOUT(:,:)
+         D2FLDOUT_oAVG(:,:) = D2FLDOUT(:,:)
+      else
+         D2RIVOUT_oAVG(:,:) = .0
+         D2FLDOUT_oAVG(:,:) = .0       
+      end if 
+          
       call RTM_Export(gcomp, rc=rc)
       if (CheckErr(rc,__LINE__,u_FILE_u)) return
       
@@ -1250,17 +1253,19 @@ module RTM
                         endif
 #endif
 
-                        ptr(n,m) =  R2OUT_RIVOUT(n,m) + R2OUT_FLDOUT(n,m)
+                        ptr(n,m) =  R2OUT_RIVOUT(n,m) !+ R2OUT_FLDOUT(n,m)
 
-                        ! Select only biggest rivers with a discharge >= of a given threshold defined in the namelist and
+                        ! Select only biggest rivers with a discharge >= 50 m3/s and
                         ! keep only outlet points 
-                        if(I2NEXTY(n,m) .ne. -9 .and. I2NEXTY(n,m)/=IMIS .or. ptr(n,m) < RiverThreshold) ptr(n,m) = 0.0d0 
+!                        if(I2NEXTY(n,m) .ne. -9 .and. I2NEXTY(n,m)/=IMIS .or. ptr(n,m) < RiverThreshold) ptr(n,m) = 0.0d0 
+                        if(I2NEXTY(n,m) .ne. -9 .and. I2NEXTY(n,m)/=IMIS .or. ptr(n,m) < RiverThreshold .or. ptr(n,m) >= 1e20 ) ptr(n,m) = 0.0d0 
                         
                         ! Mask out rivers with the outlet points outside the Mediterranean Sea
                         if(D1LAT(m) .gt. 46.0 .or.                            &
                           (D1LAT(m) .gt. 41.0 .and. D1LON(n) .gt. 28.0) .or.  &
                           (D1LAT(m) .gt. 42.0 .and. D1LON(n) .lt. 2.0)  .or.  &
                           (D1LAT(m) .gt. 29.0 .and. D1LON(n) .lt.-5.625 )) ptr(n,m) = 0.0d0 
+!                          
                       end do
                   end do
             end select

@@ -411,7 +411,22 @@ module esm_cpl
                   if (CheckErr(rc,__LINE__,u_FILE_u)) return
 !                 
                else
-                  call ESMF_FieldRegridStore(srcField=srcField,         &
+                  if (iSrc == Iriver) then
+                     call ESMF_FieldRegridStore(srcField=srcField,      &
+                                 dstField=dstField,                     &
+!                                srcMaskValues=(/srcMaskVal/),          &
+                                 dstMaskValues=(/dstMaskVal/),          &
+                                 unmappedaction=unmap,                  &
+                                 routeHandle=routeHandle,               &
+                                 regridmethod=regridmethod,             &
+                                 extrapMethod=extrapMethod,             &
+                                 extrapNumLevels=1,                     &
+                                 srcTermProcessing=srcTermProcessing,   &
+                                 ignoreDegenerate=.true.,               &
+                                 rc=rc)
+                     if (CheckErr(rc,__LINE__,u_FILE_u)) return                   
+                  else                  
+                     call ESMF_FieldRegridStore(srcField=srcField,      &
                                  dstField=dstField,                     &
                                  srcMaskValues=(/srcMaskVal/),          &
                                  dstMaskValues=(/dstMaskVal/),          &
@@ -423,7 +438,8 @@ module esm_cpl
                                  srcTermProcessing=srcTermProcessing,   &
                                  ignoreDegenerate=.true.,               &
                                  rc=rc)
-                  if (CheckErr(rc,__LINE__,u_FILE_u)) return                  
+                     if (CheckErr(rc,__LINE__,u_FILE_u)) return 
+                  endif                 
 !
                   ! Add name to 1st routehandle    
                   call ESMF_RouteHandleSet(routeHandle,                 &
@@ -849,7 +865,7 @@ module esm_cpl
 !     Release 2nd routehandle
 !-----------------------------------------------------------------------
 
-         if(itSrc == Icons1 .or. itSrc == Icons1) then
+         if(itSrc == Icons1 .or. itSrc == Icons2) then
             rname='rh_'//                                               &
                       TRIM(GRIDDES  (grSrc))//'_'//                     &
                       TRIM(GRIDDES  (grDst))//'_'//                     &
