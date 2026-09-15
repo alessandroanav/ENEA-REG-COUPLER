@@ -415,7 +415,7 @@ module esm_cpl
                      call ESMF_FieldRegridStore(srcField=srcField,      &
                                  dstField=dstField,                     &
 !                                srcMaskValues=(/srcMaskVal/),          &
-                                 dstMaskValues=(/dstMaskVal/),          &
+                                 dstMaskValues=(/0/),                   &
                                  unmappedaction=unmap,                  &
                                  routeHandle=routeHandle,               &
                                  regridmethod=regridmethod,             &
